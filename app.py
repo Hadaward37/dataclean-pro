@@ -381,14 +381,16 @@ if uploaded_file:
     arquivo_bytes = uploaded_file.read()
     nome_arquivo = uploaded_file.name
 
-    # Detectar abas disponíveis e mostrar seletor
+    # Detectar abas disponíveis e mostrar seletor apenas se múltiplas abas
     aba_selecionada = None
     if nome_arquivo.split(".")[-1].lower() in ("xlsx", "xls"):
         import io as _io
         xls = pd.ExcelFile(_io.BytesIO(arquivo_bytes), engine="openpyxl")
         abas = xls.sheet_names
         if len(abas) > 1:
-            aba_selecionada = st.sidebar.selectbox("📋 Selecionar aba", abas, index=0)
+            st.sidebar.divider()
+            st.sidebar.markdown("**📋 Selecionar aba do arquivo**")
+            aba_selecionada = st.sidebar.selectbox("", abas, index=0, label_visibility="collapsed")
         else:
             aba_selecionada = abas[0]
 
@@ -446,7 +448,13 @@ if uploaded_file:
             with col_dl:
                 st.markdown("<br>", unsafe_allow_html=True)
                 excel_bytes = gerar_excel(df_limpo)
-                st.download_button(label="⬇ Baixar Base_Vendas_Limpa.xlsx", data=excel_bytes, file_name="Base_Vendas_Limpa.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+                downloaded = st.download_button(label="⬇ Baixar Base_Vendas_Limpa.xlsx", data=excel_bytes, file_name="Base_Vendas_Limpa.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+            if downloaded:
+                st.session_state.pop("processado", None)
+                st.session_state.pop("df_limpo", None)
+                st.session_state.pop("log", None)
+                st.session_state.pop("chave_processamento", None)
+                st.rerun()
 
             st.dataframe(df_limpo.head(n_linhas), use_container_width=True, height=400)
 
