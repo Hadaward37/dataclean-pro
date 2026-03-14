@@ -188,7 +188,14 @@ def rodar_etl(arquivo_bytes, nome_arquivo, skip_rows, config, log):
     try:
         ext = nome_arquivo.split(".")[-1].lower()
         if ext in ("xlsx", "xls"):
-            df = pd.read_excel(io.BytesIO(arquivo_bytes), skiprows=skip_rows, header=0, engine="openpyxl" if ext == "xlsx" else None)
+            xls = pd.ExcelFile(io.BytesIO(arquivo_bytes), engine="openpyxl" if ext == "xlsx" else None)
+            abas = xls.sheet_names
+            if len(abas) > 1:
+                aba_selecionada = st.sidebar.selectbox("📋 Selecionar aba", abas, index=0)
+            else:
+                aba_selecionada = abas[0]
+            df = pd.read_excel(io.BytesIO(arquivo_bytes), sheet_name=aba_selecionada, skiprows=skip_rows, header=0, engine="openpyxl" if ext == "xlsx" else None)
+            log.append(f"📋 Aba selecionada: <b>{aba_selecionada}</b>")
         elif ext == "csv":
             df = pd.read_csv(io.BytesIO(arquivo_bytes), skiprows=skip_rows, header=0)
         else:
