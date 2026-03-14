@@ -1,0 +1,15 @@
+# DataClean Pro — Dependências
+# pip install -r requirements.txt
+
+streamlit>=1.35.0
+pandas>=2.2.0
+openpyxl>=3.1.2
+xlrd>=2.0.1          # leitura de .xls legado
+
+# Watchdog (modo automático de pasta)
+watchdog>=4.0.0
+
+# Deploy em cloud (opcional)
+# boto3>=1.34.0        # AWS Lambda + S3
+# google-cloud-storage>=2.16.0  # Google Cloud Function + GCS
+# functions-framework>=3.5.0    # GCF local dev
