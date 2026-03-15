@@ -23,12 +23,29 @@ html, body, [class*="css"] { font-family: 'Sora', sans-serif; }
 [data-testid="stSidebar"] {
     background: #0f1528 !important;
     border-right: 1px solid #1e2a45;
+    min-width: 21rem !important;
+    max-width: 21rem !important;
+    transform: none !important;
+    left: 0 !important;
+    visibility: visible !important;
+    display: block !important;
 }
+[data-testid="stSidebar"][aria-expanded="false"] {
+    min-width: 21rem !important;
+    max-width: 21rem !important;
+    transform: none !important;
+    margin-left: 0 !important;
+    left: 0 !important;
+}
+
+/* Esconde botão de toggle da sidebar */
+[data-testid="collapsedControl"] { display: none !important; }
+section[data-testid="stSidebar"] > div:first-child > div:first-child button { display: none !important; }
+
 [data-testid="stSidebar"] .stMarkdown h1,
 [data-testid="stSidebar"] .stMarkdown h2,
 [data-testid="stSidebar"] .stMarkdown h3 { color: #7dd3fc; }
 
-/* ── LABELS DA SIDEBAR ── */
 [data-testid="stSidebar"] label,
 [data-testid="stSidebar"] label p,
 [data-testid="stSidebar"] .stTextInput > label,
@@ -90,7 +107,6 @@ html, body, [class*="css"] { font-family: 'Sora', sans-serif; }
     padding: 16px 20px; margin: 8px 0; font-size: 0.9rem;
 }
 .step-container.done { border-left-color: #10b981; background: #0d1f1a; }
-.step-container.done .step-icon { color: #10b981; }
 .step-title { font-weight: 600; color: #e2e8f0; margin-bottom: 4px; }
 .step-detail { color: #94a3b8; font-size: 0.82rem; font-family: 'JetBrains Mono', monospace; }
 
@@ -183,6 +199,34 @@ def detectar_coluna(df: pd.DataFrame, candidatos: list) -> str | None:
     return None
 
 
+def reordenar_colunas(df: pd.DataFrame, col_prod_orig: str, col_end_orig: str) -> pd.DataFrame:
+    """Reordena colunas: Produto+Marca juntas, Cidade logo após Endereço."""
+    cols = list(df.columns)
+
+    # Produto e Marca lado a lado no lugar da coluna original
+    if "Produto" in cols and "Marca" in cols:
+        # Remove Produto e Marca de onde estão
+        cols = [c for c in cols if c not in ("Produto", "Marca")]
+        # Insere após a posição do endereço ou no início
+        insert_pos = 0
+        for i, c in enumerate(cols):
+            if c == col_prod_orig:
+                insert_pos = i
+                break
+        cols.insert(insert_pos, "Marca")
+        cols.insert(insert_pos, "Produto")
+
+    # Cidade logo após Endereço
+    if "Cidade" in cols and col_end_orig in cols:
+        cols = [c for c in cols if c != "Cidade"]
+        end_pos = cols.index(col_end_orig)
+        cols.insert(end_pos + 1, "Cidade")
+
+    # Garante que todas as colunas existam
+    cols = [c for c in cols if c in df.columns]
+    return df[cols]
+
+
 def rodar_etl(arquivo_bytes, nome_arquivo, skip_rows, config, log):
     log.append(f"📂 Arquivo recebido: <b>{nome_arquivo}</b>")
     try:
@@ -212,14 +256,17 @@ def rodar_etl(arquivo_bytes, nome_arquivo, skip_rows, config, log):
         df.drop(columns=[col_obs], inplace=True)
         log.append(f"🗑️  Coluna removida: {col_obs}")
 
+    col_prod_orig = None
     col_prod = detectar_coluna(df, config.get("col_produto", ["Produto", "Product", "Item"]))
     if col_prod:
+        col_prod_orig = col_prod
         delimitador = config.get("delimitador_produto", " - ")
         split = df[col_prod].astype(str).str.split(delimitador, n=1, expand=True)
         df["Produto"] = split[0].str.strip()
         df["Marca"] = split[1].str.strip() if split.shape[1] > 1 else ""
         if col_prod not in ("Produto",):
             df.drop(columns=[col_prod], inplace=True)
+            col_prod_orig = None
         log.append(f"✂️  Split de produto: '{col_prod}' → Produto + Marca")
     else:
         log.append("⚠️  Coluna de produto não encontrada — pulando split")
@@ -238,8 +285,10 @@ def rodar_etl(arquivo_bytes, nome_arquivo, skip_rows, config, log):
     else:
         log.append("⚠️  Coluna de gênero não encontrada — pulando mapeamento")
 
+    col_end_orig = None
     col_end = detectar_coluna(df, config.get("col_endereco", ["Endereço", "Endereco", "Address", "Logradouro"]))
     if col_end:
+        col_end_orig = col_end
         df["Cidade"] = df[col_end].apply(extrair_cidade)
         log.append(f"🏙️  Cidade extraída de: {col_end}")
     else:
@@ -263,6 +312,10 @@ def rodar_etl(arquivo_bytes, nome_arquivo, skip_rows, config, log):
                 log.append(f"💰 Tipagem float: {col_real}")
             except Exception:
                 pass
+
+    # Reordenar colunas
+    df = reordenar_colunas(df, col_prod_orig or "Produto", col_end_orig or "Endereço")
+    log.append(f"📐 Colunas reordenadas")
 
     df.reset_index(drop=True, inplace=True)
     log.append(f"🎉 ETL concluído! Base final: <b>{df.shape[0]} linhas × {df.shape[1]} colunas</b>")
@@ -381,7 +434,6 @@ if uploaded_file:
     arquivo_bytes = uploaded_file.read()
     nome_arquivo = uploaded_file.name
 
-    # Detectar abas disponíveis e mostrar seletor apenas se múltiplas abas
     aba_selecionada = None
     if nome_arquivo.split(".")[-1].lower() in ("xlsx", "xls"):
         import io as _io
@@ -394,7 +446,6 @@ if uploaded_file:
         else:
             aba_selecionada = abas[0]
 
-    # Detectar mudanças no arquivo ou aba para limpar cache
     chave_atual = f"{nome_arquivo}_{aba_selecionada}"
     if st.session_state.get("chave_processamento") != chave_atual:
         st.session_state.pop("processado", None)
@@ -448,7 +499,13 @@ if uploaded_file:
             with col_dl:
                 st.markdown("<br>", unsafe_allow_html=True)
                 excel_bytes = gerar_excel(df_limpo)
-                downloaded = st.download_button(label="⬇ Baixar Base_Vendas_Limpa.xlsx", data=excel_bytes, file_name="Base_Vendas_Limpa.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+                downloaded = st.download_button(
+                    label="⬇ Baixar Base_Vendas_Limpa.xlsx",
+                    data=excel_bytes,
+                    file_name="Base_Vendas_Limpa.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
             if downloaded:
                 st.session_state.pop("processado", None)
                 st.session_state.pop("df_limpo", None)
